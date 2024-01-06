@@ -198,6 +198,7 @@ var lastMB=[]// remaining bytes not used
 
 var MB_PACK=1000
 var MB_ITEM=1001
+var MB_MAC_ADDR=1002
 
 var READ_COIL=1
 var READ_DISCRETE=2
@@ -213,10 +214,34 @@ var MASTER=0
 var SLAVE=1
 var isMaster=true
 
-var processPack=(pack)=>{
-//   cl(pack.length)
-  sendMB(pack)
+var getMacAddr=(pack,connId)=>{
+//   cl(pack)// xx:xx:xx:xx:xx:xx
+  let str=String.fromCharCode(...pack.slice(4))
+  cl(str)
+  let vals=[]
+  for(let i=0;i<6;i++){
+    vals.push(parseInt(str.substring(3*i,3*i+2),16))
+  }
+  let buf=Buffer.from(vals)
+  let str2=buf.toString('base64')
+  cl(str2)
+  let conn=tcpConnections[connId].conn
+//   cl([conn.remoteFamily,conn.remoteAddress])
+//   cl(vals)
+//   cl(buf)
+}
 
+var processPack=(pack,connId)=>{
+//   cl(pack.length)
+  let cmd=pack[0]|(pack[1]<<8)
+//   cl(cmd)
+  if((pack[0]|(pack[1]<<8))==MB_MAC_ADDR){
+//     cl("mac")
+    getMacAddr(pack,connId)
+  }else{
+//     cl(pack)
+    sendMB(pack)
+  }
 }
 
 var processPacks2=()=>{// to be moved to front end
@@ -234,6 +259,7 @@ var processPacks2=()=>{// to be moved to front end
   }
 
   var readMB=()=>{
+// note that this code has moved to the front end!!!
     while(lastMB.length>24){
       cl(`Read MB Length: ${lastMB.length}`)
       data=lastMB
@@ -291,6 +317,10 @@ var processPacks2=()=>{// to be moved to front end
     }
   }
 
+  getMacAddr=(pack,bytes)=>{
+    cl(pack,bytes)
+  }
+
 
   while(packs.length){
 //     cl("while packs")
@@ -298,7 +328,7 @@ var processPacks2=()=>{// to be moved to front end
 //     cl(pack)
     while(pack.length){
       let cmd=readWord(pack)//pack[0]|(pack[1]<<8)
-//       cl(cmd)
+      cl(cmd)
       switch(cmd){
         case MB_PACK:
           packRem=readWord(pack)-4
@@ -311,6 +341,10 @@ var processPacks2=()=>{// to be moved to front end
 //           cl(pack.slice(0,itemRem))
           lastMB=lastMB.concat(pack.slice(0,itemRem))
           pack=pack.slice(itemRem)
+          break
+        case MB_MAC_ADDR:
+          let bytesRem=readWord(pack)-8
+          getMacAddr(pack,bytesRem)
           break
       }
     }
@@ -356,7 +390,7 @@ var tcpData=(e,connId)=>{
 //   cl("data")
 //   tcpConnections[connId].conn.write("ok\n")
   let arr=[...e]
-  processPack(arr)
+  processPack(arr,connId)
   return
 
 //   packs.push(arr)
@@ -383,6 +417,9 @@ var tcpListen=()=>{
 }
 
 var tcpConnection=(conn)=>{
+//   cl(Object.keys(conn))
+  cl(conn.remoteAddress)
+  cl(conn.remoteFamily)
     let connId=tcpConnections.length
     conn.on('data',e=>tcpData(e,connId))
     conn.on('close',e=>tcpClose(e,connId))
@@ -465,9 +502,8 @@ use 3201 for TCP from the ESP32
 
 var init=()=>{
   cl("init")
-//   makeTcpServer()
-//   openWebSocket(3202,wsOnConnect)
-//   utils.testMail()
+  makeTcpServer()
+  openWebSocket(3202,wsOnConnect)
 
 }
 
